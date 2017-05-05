@@ -1,0 +1,186 @@
+---
+title: "Time Series Modeling and Filtering Course Final Report"
+author: "Minzhe Zhang"
+date: "2017/5/2"
+output: html_document
+---
+
+### 1. Reserve Bank of Australia
+
+#### a) ACF and PACF
+From the following plots, we see that the acf follows exponential decay, and pacf is significant till p month lag. This suggest the rank monthly interests data may follow AR process. However, from the acf plot, we also see that the acf decay very slowly, suggest high correlation between nearby time point, which may result from non-stationarity.
+```{r, fig.width=10}
+bank.data <- read.table("ReserveBankofAusatraliadata.txt")
+bank.data <- ts(bank.data[,1], frequency = 12, start = c(1981, 1), names = "Monthly interest rate")
+bank.ts <- window(bank.data, end = c(1994, 5))
+bank.test.ts <- window(bank.data, start = c(1994, 5))
+par(mfrow = c(1, 2))
+acf(bank.ts, main = "ACF of monthly interest rate")
+pacf(bank.ts, main = "PACF of monthly interest rate")
+```
+
+
+#### b) Differencing
+From the time series plots, we see the original time series is not stationary, but after differencing it is stationary. From acf and pacf, we do not see obvious AR and MA order.
+```{r, fig.width=10, fig.show="hold"}
+par(mfrow = c(1, 2))
+plot.ts(bank.ts, main = "Time series of monthly interest rate")
+plot.ts(diff(bank.ts), main = "Time series of differenced monthly interest rate")
+acf(diff(bank.ts), main = "ACF of differenced monthly interest rate")
+pacf(diff(bank.ts), main = "PACF of differenced monthly interest rate")
+```
+
+
+#### c) ARMA
+Based on the acf and pacf plot, we initially propose a ARIMA(0,1,0) model, which is just random walk.
+```{r}
+library(tseries)
+arima010 <- arima(bank.ts, order = c(0,1,0))
+```
+
+#### d) Model comparison
+We compare the previous model with ARIMA(p,d,q), p, d, q are chosen between [0,2]. Based on AIC and log likelihood criteria, ARIMA(2,1,2) has the maximum log likelihood and minimum AIC. Therefore, we choose it as the final model.
+```{r}
+model <- c()
+for (p in c(0,1,2)) {
+    for (d in c(0,1,2)) {
+        for (q in c(0,1,2)) {
+            do.call("<-", list(paste(c("arima", p, d, q), collapse = ""), arima(bank.ts, order = c(p, d, q))))
+            model <- c(model, paste(c("arima", p, d, q), collapse = ""))
+        }
+    }
+}
+sigma2 <- sapply(paste(model, "$sigma2", sep=""), function(x) eval(parse(text = x)))
+loglik <- sapply(paste(model, "$loglik", sep=""), function(x) eval(parse(text = x)))
+aic <- sapply(paste(model, "$aic", sep=""), function(x) eval(parse(text = x)))
+model.comp <- data.frame(sigma2 = sigma2, loglik = loglik, aic = aic, row.names = model)
+model.comp$" " <- rep("", nrow(model.comp))
+model.comp[which.min(model.comp$aic), 4] <- "<- selected"
+model.comp
+```
+
+#### e) Diagnostics
+From the diagnostic plot, we do not see obvious violation of homoscedasticity. No strong autocorrelation is seen in the residual time series though lag 7 just touch the significant level. Ljung–Box test also does not show any significant serial correlation. QQ-plot show residuals are roughly normally distributed.
+```{r, fig.show="hold", fig.width=10}
+par(mfrow = c(1, 2))
+plot(scale(arima212$residuals), type = "h", ylab = "", main = "Standardized Residuals")
+abline(h = 0)
+acf(arima212$residuals, main = "ACF of Residuals")
+plot(x = 1:12,
+     y = sapply(1:12, function(x) Box.test(arima212$residuals, type = "Ljung-Box", lag = x)$p.value),
+     main = "p values for Ljung-Box Statistic",
+     xlab = "lag",
+     ylab = "p value",
+     ylim = c(0, 1))
+abline(h = 0.05, lty = 2, col = "blue")
+qqnorm(arima212$residuals)
+qqline(arima212$residuals, col = "red")
+```
+
+
+#### f) Forecast
+The prediction the monthly interest rates for June, July and August of 1994 and their corresponding 99% prediction intervals are showed below. Plot show focast, prediction interval and real value of the three monthes.
+```{r, fig.show="hold"}
+library(forecast)
+bank.fcst <- forecast(arima212, h = 3, level = 99)
+plot(bank.fcst)
+lines(bank.test.ts, col = "red")
+bank.fcst
+```
+
+
+#### g) Conclusion
+The prediction result of ARIMA(2,1,2) are close to the real values, suggest a relative good predictive power of the obtained model. However, diagnostic plots show there may exist some unexplained autocorrelation in the residuals. The forecast may be further improved by using more complex model.
+
+
+### 2. Dow-Jones industrial index
+
+#### a) ACF and PACF
+From the following plots, we see the acf first decrease then negatively increase, pacf does not show any significant lag, suggest the data may not follow stationarity.
+```{r, fig.width=10}
+DJ.data <- read.table("Dow-Jones.industrial.index.txt", row.names = 1)
+DJ.data <- ts(DJ.data[,1], frequency = 12, start = c(1968, 8), names = "Dow-Jones industrial index")
+DJ.ts <- window(DJ.data, end = c(1980, 7))
+DJ.test.ts <- window(DJ.data, start = c(1980,7))
+par.default <- par()
+par(mfrow = c(1, 2))
+acf(DJ.ts, main = "ACF of Dow-Jones industrial index")
+pacf(DJ.ts, main = "PACF of Dow-Jones industrial index")
+```
+
+
+#### b) Differencing
+After differencing, the time series is more stationary than original series. But only lag in 14 month reached the significant level in acf and pacf plots, so probably there is no AR or MA process.
+```{r, fig.width=10}
+par(mfrow = c(1, 2))
+plot.ts(DJ.ts, main = "Time series of Dow-Jones industrial index")
+plot.ts(diff(DJ.ts), main = "Time series of differenced Dow-Jones industrial index")
+acf(diff(DJ.ts), main = "ACF of differenced Dow-Jones industrial index")
+pacf(diff(DJ.ts), main = "PACF of differenced Dow-Jones industrial index")
+```
+
+
+#### c) ARMA
+Based on the acf and pacf plot, we initially propose a ARIMA(0,1,0) model, which is just random walk.
+```{r}
+arima010 <- arima(DJ.ts, order = c(0,1,0))
+```
+
+
+#### d) Model comparison
+We compare the previous model with ARIMA(p,d,q), while p, d, q are chosed from 0, 1, 2. Based on AIC criterion, ARIMA(0,2,1) has the smallest AIC, and relatively large log likelihood value. Therefore, it is chosen as the final model.
+```{r}
+model <- c()
+for (p in c(0,1,2)) {
+    for (d in c(0,1,2)) {
+        for (q in c(0,1,2)) {
+            do.call("<-", list(paste(c("arima", p, d, q), collapse = ""), arima(DJ.ts, order = c(p, d, q))))
+            model <- c(model, paste(c("arima", p, d, q), collapse = ""))
+        }
+    }
+}
+sigma2 <- sapply(paste(model, "$sigma2", sep=""), function(x) eval(parse(text = x)))
+loglik <- sapply(paste(model, "$loglik", sep=""), function(x) eval(parse(text = x)))
+aic <- sapply(paste(model, "$aic", sep=""), function(x) eval(parse(text = x)))
+model.comp <- data.frame(sigma2 = sigma2, loglik = loglik, aic = aic, row.names = model)
+model.comp$" " <- rep("", nrow(model.comp))
+model.comp[which.min(model.comp$aic), 4] <- "<- selected"
+model.comp
+```
+
+
+
+#### e) Diagnostics
+From the diagnostic plot, residuals are homoscedastic. No strong autocorrelation is seen in the residual time series though lag 14 just touch the significant level. Ljung–Box test at different lag all have large p value, indicating the independence of residulas. QQ-plot of residuals overlapped nicely with the normal distribution quantiles.
+```{r, fig.show="hold", fig.width=10}
+par(mfrow = c(1, 2))
+plot(scale(arima021$residuals), type = "h", ylab = "", main = "Standardized Residuals")
+abline(h = 0)
+acf(arima021$residuals, main = "ACF of Residuals")
+plot(x = 1:12,
+     y = sapply(1:12, function(x) Box.test(arima021$residuals, type = "Ljung-Box", lag = x)$p.value),
+     main = "p values for Ljung-Box Statistic",
+     xlab = "lag",
+     ylab = "p value",
+     ylim = c(0, 1))
+abline(h = 0.05, lty = 2, col = "blue")
+qqnorm(arima021$residuals)
+qqline(arima021$residuals, col = "red")
+```
+
+
+#### f) Forecast
+The prediction the Dow-Jones industrial index for Aug 1980 and Aug 1981 and their corresponding 90% prediction intervals are showed below. Plot show focast, prediction interval and real value of the thirteen monthes.
+```{r, fig.show="hold"}
+library(forecast)
+DJ.fcst <- forecast(arima021, h = 13, level = 90)
+plot(DJ.fcst)
+lines(DJ.test.ts, col = "red")
+DJ.fcst.point <- data.frame(Real.Value = DJ.test.ts[-1], Point.Forecast = DJ.fcst$mean, Lo.90 = DJ.fcst$lower[,1], Hi.90 = DJ.fcst$upper[,1])[c(1,13),]
+row.names(DJ.fcst.point) <- c("Aug 1980", "Aug 1981")
+DJ.fcst.point
+```
+
+
+#### g) Conclusion
+The prediction result of Aug 1980 by ARIMA(0,2,1) are close to the real values, suggest a relative good predictive power of the obtained model, while forecast on Aug 1981 deviate much more, because ARIMA model is only suitable for short-term forecast. In general, we have shown that using ARIMA model to predict short-term Dow-Jones industrial index is possible. 
